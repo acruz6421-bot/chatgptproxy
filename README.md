@@ -68,8 +68,8 @@ Para capturar as credenciais da sua sessão:
 
 ### Passo 3: Iniciar o Servidor Proxy
 1. Dê um clique duplo no arquivo **`start-chatgptproxy.cmd`** (ou execute `python app.py` no terminal).
-2. O script irá limpar a porta 3500 de execuções antigas e subirá o servidor local.
-3. Pronto! Seu proxy estará rodando no endereço: `http://localhost:3500`
+2. O script irá limpar a porta 3535 de execuções antigas e subirá o servidor local.
+3. Pronto! Seu proxy estará rodando no endereço: `http://localhost:3535`
 
 ---
 
@@ -80,7 +80,7 @@ Para usar o proxy nas suas extensões ou editores de código favoritos:
 ### 1. Cline / Kilo Code / OpenCode / openclaw / Continue
 Configure a extensão com os seguintes dados:
 * **Provider (Provedor):** `OpenAI-Compatible` (ou `Custom / Custom OpenAI`)
-* **Base URL:** `http://localhost:3500/v1`
+* **Base URL:** `http://localhost:3535/v1`
 * **API Key:** `chatgpt-local-dev` (Esta é a chave padrão definida no arquivo `.env`)
 * **Model ID:** `gpt-4o-mini`, `gpt-4o` ou `gpt-5` (O proxy traduz o modelo para o upstream adequado)
 
@@ -88,7 +88,7 @@ Configure a extensão com os seguintes dados:
 ```yaml
 custom_providers:
   - name: chatgptproxy
-    base_url: http://localhost:3500/v1
+    base_url: http://localhost:3535/v1
     api_key: chatgpt-local-dev
     api_mode: chat_completions
     model: gpt-4o-mini

@@ -157,7 +157,7 @@ def main():
     print("=" * 56)
     print(f"[*] importadas {imported}/{len(ids)} contas. Total no pool: {len(accounts)}")
     if imported:
-        print("[*] reinicie o servidor (start-chatgptproxy.cmd) e cheque http://localhost:3500/health")
+        print("[*] reinicie o servidor (start-chatgptproxy.cmd) e cheque http://localhost:3535/health")
 
 
 if __name__ == "__main__":

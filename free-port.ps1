@@ -1,4 +1,4 @@
-param([int]$Port = 3500)
+param([int]$Port = 3535)
 # Encerra qualquer processo escutando na porta $Port (resíduos do chatgptproxy)
 $killed = 0
 try {
