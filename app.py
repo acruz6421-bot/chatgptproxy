@@ -84,6 +84,14 @@ def clean_and_stringify_content(content) -> str:
         print(f"[chatgpt] REWRITE: removing misleading 'Workspace root folder: /' line")
         text = re.sub(r"\s*Workspace root folder: /\s*\n?", "\n", text)
         print(f"[chatgpt] REWRITE: done")
+
+    # Clean PowerShell CLIXML headers and progress objects
+    if "#< CLIXML" in text or "<Objs" in text:
+        print(f"[chatgpt] REWRITE: cleaning CLIXML/progress tags from tool output")
+        text = text.replace("#< CLIXML", "")
+        text = re.sub(r"<Objs\b.*?</Objs>", "", text, flags=re.DOTALL)
+        print(f"[chatgpt] REWRITE: done")
+
     return text
 
 
