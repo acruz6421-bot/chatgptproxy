@@ -22,6 +22,17 @@ Com ele, você pode usar o ChatGPT gratuitamente dentro de qualquer ferramenta d
 
 ---
 
+## ✅ Compatibilidade com Clientes
+
+A forma como cada cliente monta o prompt e valida as *tool calls* muda muito o resultado quando o backend é um chat web (o modelo do ChatGPT tende a recorrer à própria sandbox/Code Interpreter):
+
+* ✅ **Funciona bem — agentes de CLI leves:** validado com o **Hermes** executando tarefas agênticas reais (listar e ler arquivos e então responder), com *tool-calling* de ponta a ponta e sem alucinação de ambiente. Clientes nesse estilo — prompt enxuto e tolerantes a pequenas variações na *tool call* — são a melhor escolha.
+* ⚠️ **Parcial — agentes de IDE pesados (Kilo Code, OpenCode):** funcionam de forma **intermitente**. O *system prompt* deles é enorme e dispara o reflexo do modelo de usar a sandbox interna do ChatGPT; além disso a validação estrita de schema rejeita *tool calls* quase-corretas. O proxy mitiga isso com um *nudge* de formato no primeiro turno, tolerância ao formato `container.exec` e **auto-retry** quando detecta um turno degradado — mas **não chega a 100%**.
+
+Para uso agêntico sério, prefira um agente de CLI leve. Em IDEs pesados, espere reprocessamentos e falhas ocasionais.
+
+---
+
 ## 🛠️ Como Funciona (Simplificado)
 
 ```mermaid
