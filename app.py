@@ -139,14 +139,29 @@ def format_conversation(messages: list, tools=None, tool_choice=None) -> str:
             nm = m.get("name") or m.get("tool_call_id") or "tool"
             formatted.append(f"Tool (Resultado da ferramenta {nm}): {content}")
             
-    # Injeta Nudge anti-memoria e anti-python para forcar o uso das ferramentas customizadas
+    # Nudge final dependente do contexto. NAO enumerar caminhos de sandbox (ex.
+    # '/etc', '/usr', '/openai'): mencioná-los — mesmo para negá-los — reforçava a
+    # alucinação de "filesystem Linux isolado" e o modelo passava a papagaiar o
+    # próprio nudge, descartando a saída real das ferramentas.
     if tools and messages:
         last_role = messages[-1].get("role")
-        if last_role in ("user", "tool", "function"):
+        if last_role in ("tool", "function"):
             formatted.append(
-                "\n[CRITICAL SYSTEM INSTRUCTION: You MUST use one of the custom tools listed under '# TOOLS AVAILABLE' (such as 'glob', 'read', 'grep', or 'bash') to investigate or act in the workspace.\n"
-                "DO NOT use your built-in/native Python tool, Advanced Data Analysis, or Code Interpreter. They run in a remote sandbox on your servers and have NO access to the user's workspace. Your previous memories or internal listings about the filesystem (e.g. Linux directories like '/etc', '/var', '/usr', '/openai', '/caas_toolbox') are STALE and INCORRECT. The current workspace is different. "
-                "You MUST call the custom tools immediately using the exact `<tool_call>` tag format. Choose a tool (like 'glob' or 'bash') and execute it now.]"
+                "\n[SYSTEM INSTRUCTION: The 'Tool (...)' block above is the REAL output produced by "
+                "running your tool call on the user's actual machine. Treat it as ground truth and as "
+                "the current state of the workspace. Continue the task based strictly on it: call "
+                "another tool using the exact <tool_call>{...}</tool_call> format if you need more "
+                "information, or give your final answer. NEVER claim a directory or file does not "
+                "exist, or that you are in a different/isolated environment, when it appears in the "
+                "output above.]"
+            )
+        elif last_role == "user":
+            formatted.append(
+                "\n[SYSTEM INSTRUCTION: To inspect or act on the user's workspace you MUST call one of "
+                "the tools listed under '# TOOLS AVAILABLE' (such as 'glob', 'read', 'grep', or 'bash') "
+                "using the exact <tool_call>{...}</tool_call> format. These tools run on the user's "
+                "REAL machine and have full access to the workspace. Do not rely on any internal "
+                "sandbox. Choose a tool and call it now.]"
             )
             
     return "\n\n".join(formatted)

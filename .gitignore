@@ -1,10 +1,23 @@
+# Segredos e credenciais (NUNCA versionar)
 .env
 accounts.json
+accounts_log.json
+sessions.json
+ref_codes.json
+CONEXAO.txt
+
+# Perfis de navegador persistentes (contêm sessões/cookies)
 chatgpt_profile/
 chatgpt_profiles/
-__pycache__/
+
+# Artefatos de debug
 *.log
+*.png
+
+# Python
+__pycache__/
 *.pyc
+
+# Editores
 .idea/
 .vscode/
-CONEXAO.txt

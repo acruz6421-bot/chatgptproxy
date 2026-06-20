@@ -7,7 +7,7 @@
 
 **ChatGPTProxy** é um utilitário prático que transforma a interface web gratuita do **ChatGPT (chatgpt.com)** em uma API totalmente compatível com o formato da OpenAI (`/v1/chat/completions`).
 
-Com ele, você pode usar o ChatGPT gratuitamente dentro de qualquer ferramenta de desenvolvimento, como **Cline**, **Kilo Code**, **OpenCode**, **Continue**, **Aider**, **Hermes**, ou qualquer SDK oficial da OpenAI.
+Com ele, você pode usar o ChatGPT gratuitamente dentro de qualquer ferramenta de desenvolvimento, como **Cline**, **Kilo Code**, **OpenCode**, **openclaw**, **Continue**, **Aider**, **Hermes**, ou qualquer SDK oficial da OpenAI.
 
 ---
 
@@ -77,7 +77,7 @@ Para capturar as credenciais da sua sessão:
 
 Para usar o proxy nas suas extensões ou editores de código favoritos:
 
-### 1. Cline / Kilo Code / OpenCode / Continue
+### 1. Cline / Kilo Code / OpenCode / openclaw / Continue
 Configure a extensão com os seguintes dados:
 * **Provider (Provedor):** `OpenAI-Compatible` (ou `Custom / Custom OpenAI`)
 * **Base URL:** `http://localhost:3500/v1`
