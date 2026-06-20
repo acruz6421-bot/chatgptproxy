@@ -63,6 +63,30 @@ def _check_auth(request: Request):
         raise HTTPException(status_code=401, detail="Invalid API key")
 
 
+def clean_and_stringify_content(content) -> str:
+    if isinstance(content, str):
+        text = content
+    elif isinstance(content, list):
+        parts = []
+        for part in content:
+            if isinstance(part, dict):
+                if part.get("type") == "text":
+                    parts.append(part.get("text") or "")
+                elif part.get("type") == "image_url":
+                    parts.append("[Image]")
+            else:
+                parts.append(str(part))
+        text = "\n".join(parts)
+    else:
+        text = str(content) if content is not None else ""
+
+    if "Workspace root folder: /" in text and "Workspace root folder: /workspace" not in text:
+        print(f"[chatgpt] REWRITE: removing misleading 'Workspace root folder: /' line")
+        text = re.sub(r"\s*Workspace root folder: /\s*\n?", "\n", text)
+        print(f"[chatgpt] REWRITE: done")
+    return text
+
+
 def format_conversation(messages: list, tools=None, tool_choice=None) -> str:
     """Consolida as mensagens do historico em um único prompt formatado para o ChatGPT Web."""
     formatted = []
@@ -74,18 +98,8 @@ def format_conversation(messages: list, tools=None, tool_choice=None) -> str:
     system_prompts = []
     for m in messages:
         if m.get("role") == "system":
-            val = m.get("content")
+            val = clean_and_stringify_content(m.get("content"))
             if val:
-                # Corrige conflito de paths: quando o workspace root é "/" (containers como
-                # WebContainers/bolt.diy), o modelo acha que está num container Linux e usa
-                # o Code Interpreter nativo para explorar "/" (sandbox da OpenAI).
-                # Solução: remover a linha "Workspace root folder: /" completamente e manter
-                # o Working directory original (Windows) para que o modelo NÃO tente usar
-                # o Code Interpreter para listar a raiz do filesystem.
-                if "Workspace root folder: /" in val and "Workspace root folder: /workspace" not in val:
-                    print(f"[chatgpt] REWRITE: removing misleading 'Workspace root folder: /' line")
-                    val = re.sub(r"\s*Workspace root folder: /\s*\n", "\n", val)
-                    print(f"[chatgpt] REWRITE: done")
                 system_prompts.append(val)
                 
     if tools_block:
@@ -103,7 +117,7 @@ def format_conversation(messages: list, tools=None, tool_choice=None) -> str:
         if role == "system":
             continue
             
-        content = m.get("content") or ""
+        content = clean_and_stringify_content(m.get("content"))
         # Caso o assistente tenha gerado tool calls no turno anterior, anexa-as ao prompt
         if role == "assistant":
             if isinstance(m.get("tool_calls"), list) and m["tool_calls"]:
