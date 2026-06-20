@@ -8,7 +8,11 @@ echo.
 echo Starting ChatGPTProxy on http://localhost:3500 ...
 echo (Feche esta janela para parar o proxy.)
 echo.
-python app.py
+set PYTHON_PATH=python
+if exist "%USERPROFILE%\AppData\Local\Programs\Python\Python311\python.exe" (
+    set PYTHON_PATH="%USERPROFILE%\AppData\Local\Programs\Python\Python311\python.exe"
+)
+%PYTHON_PATH% app.py
 echo.
 echo ChatGPTProxy parou. Pressione qualquer tecla para fechar.
 pause >nul

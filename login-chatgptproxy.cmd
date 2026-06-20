@@ -26,7 +26,11 @@ echo 3. Assim que ver a tela de chat/conversa, feche a janela ou pressione Ctrl+
 echo ================================================================
 echo.
 
-python login_chatgpt.py %PROFILE_ID%
+set PYTHON_PATH=python
+if exist "%USERPROFILE%\AppData\Local\Programs\Python\Python311\python.exe" (
+    set PYTHON_PATH="%USERPROFILE%\AppData\Local\Programs\Python\Python311\python.exe"
+)
+%PYTHON_PATH% login_chatgpt.py %PROFILE_ID%
 
 echo.
 echo Concluido! Pressione qualquer tecla para fechar.
