@@ -15,7 +15,7 @@ import uvicorn
 from dotenv import load_dotenv
 
 from chatgpt_client import ChatGPTClient, ChatGPTAuthFailure
-from tool_calling import StreamingToolParser, build_tools_instructions, serialize_tool_calls_for_history
+from tool_calling import StreamingToolParser, build_tools_instructions, serialize_tool_calls_for_history, recover_tool_calls_from_text
 import account_pool as ap
 
 load_dotenv()
@@ -439,6 +439,13 @@ def chat_completions(payload: dict, request: Request):
                         yield c_toolcall(tc, tool_idx)
                         tool_idx += 1
 
+                # Fallback: o modelo emitiu container.exec/{"cmd":...} ou JSON cru fora
+                # das tags <tool_call>. Recupera como tool_calls pra não travar o loop.
+                if parser and tool_idx == 0:
+                    for tc in recover_tool_calls_from_text("".join(logged_content_parts), tools):
+                        yield c_toolcall(tc, tool_idx)
+                        tool_idx += 1
+
                 if active_acct:
                     print(f"[chatgpt] req#{cmpl_id} conta={active_acct['name']} id={active_acct['id']} sucesso")
                     ap.mark_success(active_acct["id"])
@@ -527,6 +534,10 @@ def chat_completions(payload: dict, request: Request):
             if text:
                 content_parts.append(text)
             tool_calls_out.extend(tcs)
+
+        # Fallback: recupera container.exec/{"cmd":...} ou JSON cru fora das tags.
+        if parser and not tool_calls_out:
+            tool_calls_out.extend(recover_tool_calls_from_text("".join(content_parts), tools))
 
         if active_acct:
             print(f"[chatgpt] req#{cmpl_id} conta={active_acct['name']} id={active_acct['id']} sucesso")

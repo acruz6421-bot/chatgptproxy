@@ -91,6 +91,110 @@ def serialize_tool_calls_for_history(tool_calls) -> str:
     return out
 
 
+# --- Tolerância ao "container.exec" do ChatGPT --------------------------------
+# O gpt-5 às vezes ignora o protocolo <tool_call> e emite, como texto, o formato
+# do sandbox nativo dele: {"cmd": ["powershell","-Command","..."]} (sem 'name').
+# Em vez de brigar com o modelo no prompt, mapeamos esse shape para a ferramenta
+# de shell disponível no cliente (ex.: 'bash') para o loop não travar.
+
+_SHELL_TOOL_NAMES = ("bash", "shell", "run_command", "execute_command", "terminal", "powershell", "run", "command")
+
+
+def resolve_shell_tool(tools):
+    """Retorna (nome_da_ferramenta, nome_do_param_de_comando) ou (None, None)."""
+    for t in tools or []:
+        if not isinstance(t, dict) or t.get("type") != "function":
+            continue
+        fn = t.get("function", {}) or {}
+        name = (fn.get("name") or "").lower()
+        if name in _SHELL_TOOL_NAMES:
+            props = ((fn.get("parameters") or {}).get("properties") or {})
+            param = "command"
+            for cand in ("command", "cmd", "script", "input"):
+                if cand in props:
+                    param = cand
+                    break
+            return fn.get("name"), param
+    return None, None
+
+
+def _cmd_to_string(cmd) -> str:
+    """Normaliza o valor de 'cmd' (lista estilo exec ou string) em uma linha de comando."""
+    if isinstance(cmd, str):
+        return cmd.strip()
+    if isinstance(cmd, list):
+        parts = [str(x) for x in cmd]
+        # Desembrulha invólucros tipo ["powershell","-Command", <real>...] / ["bash","-c", <real>]
+        low = [p.lower() for p in parts]
+        for i, p in enumerate(low):
+            if p in ("-command", "-c") and i + 1 < len(parts):
+                rest = parts[i + 1:]
+                return rest[0] if len(rest) == 1 else " ".join(rest)
+        # Remove o executável de shell inicial, se houver
+        if low and low[0] in ("powershell", "pwsh", "cmd", "bash", "sh"):
+            parts = parts[1:]
+        return " ".join(parts).strip()
+    return ""
+
+
+def _iter_json_objects(text: str):
+    """Itera objetos JSON balanceados encontrados em texto livre."""
+    i, n = 0, len(text)
+    while i < n:
+        if text[i] == "{":
+            depth, instr, esc, j = 0, False, False, i
+            while j < n:
+                ch = text[j]
+                if esc:
+                    esc = False
+                elif ch == "\\":
+                    esc = True
+                elif ch == '"':
+                    instr = not instr
+                elif not instr:
+                    if ch == "{":
+                        depth += 1
+                    elif ch == "}":
+                        depth -= 1
+                        if depth == 0:
+                            blob = text[i:j + 1]
+                            obj = _robust_json(blob)
+                            if isinstance(obj, dict):
+                                yield obj
+                            i = j
+                            break
+                j += 1
+        i += 1
+
+
+def recover_tool_calls_from_text(text: str, tools):
+    """Última linha de defesa: extrai tool calls de texto que o modelo emitiu FORA
+    das tags <tool_call> — tanto o JSON cru {"name","arguments"} quanto o
+    container.exec {"cmd": ...}. Retorna lista de tool calls (pode ser vazia)."""
+    if not text or "{" not in text:
+        return []
+    shell_name, shell_param = resolve_shell_tool(tools)
+    out = []
+    seen = set()
+    for obj in _iter_json_objects(text):
+        name = obj.get("name") or obj.get("tool") or obj.get("tool_name") or obj.get("function")
+        if name:
+            tc = StreamingToolParser()._build_tool_call(obj)
+        elif "cmd" in obj and shell_name:
+            cmd = _cmd_to_string(obj.get("cmd"))
+            if not cmd:
+                continue
+            tc = {"id": "call_" + uuid.uuid4().hex[:24], "name": shell_name, "arguments": {shell_param: cmd}}
+        else:
+            continue
+        key = (tc["name"], json.dumps(tc["arguments"], sort_keys=True, ensure_ascii=False))
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(tc)
+    return out
+
+
 def _fix_lone_backslashes(s: str) -> str:
     """Escapa '\\' que NAO seja escape JSON valido (\\" \\\\ \\/ \\b \\f \\n \\r \\t \\u).
     Conserta paths Windows ("G:\\src\\x.py") e regex ("\\d+") com backslash solitario
