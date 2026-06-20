@@ -1,0 +1,10 @@
+.env
+accounts.json
+chatgpt_profile/
+chatgpt_profiles/
+__pycache__/
+*.log
+*.pyc
+.idea/
+.vscode/
+CONEXAO.txt
