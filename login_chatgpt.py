@@ -109,20 +109,24 @@ def main():
     profile_path = str(profiles_dir / f"chatgpt_profile_{profile_id}")
     print(f"[*] Pasta de perfil persistente: {profile_path}")
 
-    access_token = None
+    def fetch_session(page):
+        """Busca /api/auth/session ativamente na própria página (same-origin), em vez
+        de depender de interceptar a resposta passivamente — que falhava quando a
+        chamada acontecia antes do listener ou não era refeita pela SPA."""
+        try:
+            return page.evaluate(
+                """async () => {
+                    try {
+                        const r = await fetch('/api/auth/session', {credentials: 'include', headers: {'accept': 'application/json'}});
+                        if (!r.ok) return {__error: 'http_' + r.status};
+                        return await r.json();
+                    } catch (e) { return {__error: String(e)}; }
+                }"""
+            ) or {}
+        except Exception as e:
+            return {"__error": str(e)}
 
-    def handle_response(response):
-        nonlocal access_token
-        if "/api/auth/session" in response.url:
-            try:
-                data = response.json()
-                tok = data.get("accessToken")
-                if tok:
-                    access_token = tok
-                    print("[+] Access Token interceptado com sucesso!")
-            except Exception:
-                pass
-
+    account_email = None
     ctx = None
     try:
         with sync_playwright() as p:
@@ -137,31 +141,39 @@ def main():
 
             ctx = p.chromium.launch_persistent_context(**launch_args)
             page = ctx.pages[0] if ctx.pages else ctx.new_page()
-            page.on("response", handle_response)
             page.goto(URL, wait_until="domcontentloaded")
 
             # Obter o User-Agent do proprio navegador
             ua = page.evaluate("navigator.userAgent")
 
-            print("\n[*] Aguardando login (procurando token de sessao)...")
-            print("    (limite de 5 minutos)")
+            print("\n[*] Aguardando login (faca login ATE a barra lateral de conversas aparecer)...")
+            print("    (verificando a sessao a cada 2s; limite de 5 minutos)")
             deadline = time.time() + 300
-            success = False
+            access_token = None
             cookie_str = None
 
             while time.time() < deadline:
-                cookies = ctx.cookies()
-                has_session = any("session" in c["name"] or "auth" in c["name"] for c in cookies)
-                if access_token and has_session:
-                    cookie_str = build_cookie_string(cookies)
-                    success = True
-                    break
+                data = fetch_session(page)
+                tok = data.get("accessToken")
+                if tok:
+                    # So aceita quando o cookie de sessao AUTENTICADA existe de fato
+                    # (evita o falso-positivo dos cookies de pre-login csrf/callback).
+                    cookies = ctx.cookies()
+                    if any("session-token" in c["name"] for c in cookies):
+                        access_token = tok
+                        account_email = (data.get("user") or {}).get("email")
+                        cookie_str = build_cookie_string(cookies)
+                        break
                 time.sleep(2)
 
-            if not success or not cookie_str or not access_token:
-                print("[!] Timeout: login nao detectado ou token ausente.")
+            if not access_token or not cookie_str:
+                print("[!] Timeout: login nao concluido (sem accessToken ou cookie de sessao).")
+                print("    Dica: deixe a barra lateral de conversas carregar ANTES de fechar a janela.")
                 ctx.close()
                 sys.exit(1)
+
+            if account_email:
+                print(f"[+] Login detectado para a conta: {account_email}")
 
             print("\n[+] Cookies + Access Token capturados com sucesso!")
             
@@ -169,9 +181,9 @@ def main():
             update_env(access_token, cookie_str, ua)
             print("[+] Credenciais default salvas no .env (fallback).")
 
-            # Definir o ID e nome padrao a partir do ID do perfil
+            # Define ID pelo perfil e nome padrao pelo e-mail capturado (fallback no perfil)
             account_id = f"profile-{profile_id}"
-            default_name = f"chatgpt-account-{profile_id}"
+            default_name = account_email or f"chatgpt-account-{profile_id}"
 
             # Solicitar nome para identificar a conta no pool
             print("-" * 64)

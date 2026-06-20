@@ -95,6 +95,53 @@ def clean_and_stringify_content(content) -> str:
     return text
 
 
+def _extract_working_dir(messages) -> str:
+    """Procura 'Working directory: X' no texto das mensagens (Kilo/OpenCode injetam isso)."""
+    for m in messages:
+        c = m.get("content")
+        if isinstance(c, str):
+            text = c
+        elif isinstance(c, list):
+            text = " ".join(p.get("text", "") for p in c if isinstance(p, dict))
+        else:
+            text = ""
+        mt = re.search(r"Working directory:\s*(.+)", text)
+        if mt:
+            return mt.group(1).strip()
+    return ""
+
+
+def _first_tool_call_example(tools, working_dir) -> str:
+    """Monta um <tool_call> concreto de 'primeira ação' usando um nome de ferramenta REAL
+    da lista, pra mostrar ao modelo exatamente como começar (e tirá-lo do sandbox)."""
+    names = [
+        (t.get("function", {}) or {}).get("name") or ""
+        for t in (tools or [])
+        if isinstance(t, dict) and t.get("type") == "function"
+    ]
+    names = [n for n in names if n]
+    if not names:
+        return ""
+
+    def pick(pred):
+        return next((n for n in names if pred(n.lower())), None)
+
+    wd = (working_dir or ".").replace("\\", "\\\\")
+    sh = pick(lambda n: n in ("bash", "shell", "run_command", "execute_command", "run", "terminal", "powershell"))
+    if sh:
+        return '<tool_call>{"name": "%s", "arguments": {"command": "Get-ChildItem -Force"}}</tool_call>' % sh
+    gl = pick(lambda n: n in ("glob", "find", "search_files", "file_search"))
+    if gl:
+        return '<tool_call>{"name": "%s", "arguments": {"pattern": "*"}}</tool_call>' % gl
+    ls = pick(lambda n: "list" in n or n in ("ls", "read_directory", "list_files", "list_directory"))
+    if ls:
+        return '<tool_call>{"name": "%s", "arguments": {"path": "%s"}}</tool_call>' % (ls, wd)
+    rd = pick(lambda n: n in ("read", "read_file", "cat", "open", "view"))
+    if rd:
+        return '<tool_call>{"name": "%s", "arguments": {"filePath": "%s"}}</tool_call>' % (rd, wd)
+    return '<tool_call>{"name": "%s", "arguments": {}}</tool_call>' % names[0]
+
+
 def format_conversation(messages: list, tools=None, tool_choice=None) -> str:
     """Consolida as mensagens do historico em um único prompt formatado para o ChatGPT Web."""
     formatted = []
@@ -156,12 +203,22 @@ def format_conversation(messages: list, tools=None, tool_choice=None) -> str:
                 "output above.]"
             )
         elif last_role == "user":
+            wd = _extract_working_dir(messages)
+            example = _first_tool_call_example(tools, wd)
             formatted.append(
-                "\n[SYSTEM INSTRUCTION: To inspect or act on the user's workspace you MUST call one of "
-                "the tools listed under '# TOOLS AVAILABLE' (such as 'glob', 'read', 'grep', or 'bash') "
-                "using the exact <tool_call>{...}</tool_call> format. These tools run on the user's "
-                "REAL machine and have full access to the workspace. Do not rely on any internal "
-                "sandbox. Choose a tool and call it now.]"
+                "\n[SYSTEM INSTRUCTION — READ CAREFULLY:\n"
+                "You are an autonomous coding agent. In THIS session you have NO Python sandbox, NO "
+                "Code Interpreter, and NO filesystem of your own. There is no environment for you to "
+                "'look around' — attempting it finds nothing and is always WRONG. The ONLY way to see "
+                "or touch the user's files is to emit a <tool_call>. The tool runs on the user's REAL "
+                "machine" + (f" (working directory: {wd})" if wd else "") + " and its result comes back "
+                "to you on the next turn.\n"
+                "Your reply to this message MUST be EXACTLY one or more <tool_call> blocks and NOTHING "
+                "ELSE — no prose, no explanation, no description of any filesystem, no conclusions. "
+                "Begin your reply immediately with the characters '<tool_call>'. Do NOT claim that "
+                "anything exists or does not exist until you have called a tool and seen its result.\n"
+                + (f"Make your first call now, for example:\n{example}" if example else "Make your first tool call now.")
+                + "]"
             )
             
     return "\n\n".join(formatted)
